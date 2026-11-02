@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b6b5e">
+<title>Delivery Log</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+/* Layout: fixed top bar, scrolling card feed, fixed bottom tab bar. */
+:root{
+  --bg:#f4f6f5; --surface:#ffffff; --surface-2:#eceeed; --line:#d9dedc;
+  --fg:#15201e; --fg-dim:#5d6b68; --fg-faint:#8b9896;
+  --accent:#0b6b5e; --accent-fg:#ffffff; --action:#c4651a;
+  --ok:#1f7a3d; --warn:#9a6b00; --bad:#a32020;
+  --radius:14px;
+  --pad-l:max(16px,env(safe-area-inset-left,0px));
+  --pad-r:max(16px,env(safe-area-inset-right,0px));
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1413; --surface:#182220; --surface-2:#212c29; --line:#2e3b38;
+  --fg:#e8efed; --fg-dim:#9cadaa; --fg-faint:#73847f;
+  --accent:#2a9c89; --accent-fg:#04120f; --action:#e3883d;
+  --ok:#4bbf71; --warn:#d5a53a; --bad:#e2706a;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0e1413; --surface:#182220; --surface-2:#212c29; --line:#2e3b38;
+  --fg:#e8efed; --fg-dim:#9cadaa; --fg-faint:#73847f;
+  --accent:#2a9c89; --accent-fg:#04120f; --action:#e3883d;
+  --ok:#4bbf71; --warn:#d5a53a; --bad:#e2706a;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--fg);font:15px/1.45 var(--font);-webkit-tap-highlight-color:transparent;overscroll-behavior-y:contain}
+img{max-width:100%;display:block}
+[hidden]{display:none!important}
+button,input,textarea,select{font:inherit;color:inherit}
+h1,h2,h3{margin:0;text-wrap:balance;letter-spacing:-.01em}
+a{color:var(--accent)}
+
+/* ---------- chrome ---------- */
+#topbar{position:fixed;top:0;left:0;right:0;z-index:20;background:var(--accent);color:var(--accent-fg);
+  padding:10px var(--pad-r) 10px var(--pad-l);padding-top:calc(10px + env(safe-area-inset-top,0px));
+  display:flex;align-items:center;gap:10px;box-shadow:0 1px 0 rgba(0,0,0,.12)}
+#topbar h1{font-size:16px;font-weight:650;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#topbar .badge{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  background:rgba(255,255,255,.18);padding:3px 7px;border-radius:999px}
+.iconbtn{background:none;border:0;padding:6px;border-radius:9px;cursor:pointer;line-height:0;opacity:.9}
+.iconbtn:active{background:rgba(255,255,255,.15)}
+#tabbar{position:fixed;bottom:0;left:0;right:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
+  display:flex;padding:0 var(--pad-r) env(safe-area-inset-bottom,0px) var(--pad-l)}
+#tabbar button{flex:1;background:none;border:0;padding:9px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:11px;font-weight:600;color:var(--fg-faint);cursor:pointer}
+#tabbar button[aria-current="page"]{color:var(--accent)}
+main{padding:0 var(--pad-r) 86px var(--pad-l);padding-top:calc(60px + env(safe-area-inset-top,0px));max-width:720px;margin:0 auto}
+
+/* ---------- pieces ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin:12px 0}
+.row{display:flex;gap:10px;align-items:center}
+.row>*{min-width:0}
+.spread{display:flex;gap:10px;align-items:center;justify-content:space-between}
+label{display:block;font-size:12px;font-weight:650;letter-spacing:.03em;text-transform:uppercase;color:var(--fg-dim);margin:14px 0 5px}
+input[type=text],input[type=email],input[type=password],input[type=tel],input[type=number],input[type=date],textarea,select{
+  width:100%;padding:11px 12px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+textarea{min-height:68px;resize:vertical}
+input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;padding:13px 16px;border:0;border-radius:11px;
+  background:var(--accent);color:var(--accent-fg);font-weight:650;cursor:pointer}
+.btn.alt{background:var(--surface-2);color:var(--fg);border:1px solid var(--line)}
+.btn.go{background:var(--action);color:#fff}
+.btn:disabled{opacity:.5}
+.btn.sm{width:auto;padding:8px 13px;font-size:13px;border-radius:9px}
+.muted{color:var(--fg-dim);font-size:13px}
+.tiny{color:var(--fg-faint);font-size:12px}
+.pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--fg-dim)}
+.pill.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
+.pill.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.shot.missing::after{content:"photo unavailable";position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:var(--fg-faint)}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin-top:11px}
+.shot{position:relative;border-radius:11px;overflow:hidden;background:var(--surface-2);aspect-ratio:4/3;max-width:100%;max-height:250px}
+.shot img{width:100%;height:100%;object-fit:cover}
+.shot .tag{position:absolute;left:7px;top:7px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  background:rgba(0,0,0,.62);color:#fff;padding:3px 7px;border-radius:6px}
+.drop{border:1.5px dashed var(--line);border-radius:11px;padding:20px 14px;text-align:center;color:var(--fg-dim);cursor:pointer;background:var(--bg)}
+.drop:active{border-color:var(--accent)}
+.maplink{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13px;color:var(--accent);text-decoration:none;
+  background:color-mix(in srgb,var(--accent) 11%,transparent);padding:7px 11px;border-radius:9px;margin-top:4px}
+.feed-empty{text-align:center;padding:48px 16px;color:var(--fg-faint)}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;
+  font-weight:700;font-size:14px;flex:none}
+.banner{position:fixed;left:var(--pad-l);right:var(--pad-r);bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:30;
+  background:var(--fg);color:var(--bg);border-radius:11px;padding:11px 13px;display:flex;gap:10px;align-items:center;font-size:13px;
+  box-shadow:0 6px 22px rgba(0,0,0,.25)}
+.banner button{background:var(--bg);color:var(--fg);border:0;border-radius:8px;padding:7px 11px;font-weight:700;font-size:12px;flex:none;cursor:pointer}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:40;
+  background:var(--fg);color:var(--bg);padding:10px 15px;border-radius:999px;font-size:13px;font-weight:600;max-width:88vw;text-align:center}
+.bar{height:5px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:9px}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .22s}
+.tabs{display:flex;gap:6px;background:var(--surface-2);padding:4px;border-radius:11px;margin:12px 0}
+.tabs button{flex:1;background:none;border:0;padding:8px;border-radius:8px;font-size:13px;font-weight:650;color:var(--fg-dim);cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--surface);color:var(--fg)}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.stat b{display:block;font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.stat span{font-size:11px;font-weight:650;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-faint)}
+.splash{display:grid;place-items:center;min-height:70vh;text-align:center;gap:10px}
+.spin{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .7s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+.person .mid{flex:1;min-width:0}
+.person .mid .tiny{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.person .right{flex:none;text-align:right;white-space:nowrap}
+.person{display:flex;gap:11px;align-items:center;width:100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--radius);padding:12px;margin:10px 0;text-align:left;cursor:pointer}
+.ico{width:20px;height:20px;flex:none}
+</style>
+</head>
+<body>
+
+<div id="topbar" hidden>
+  <button class="iconbtn" id="btnBack" hidden aria-label="Back">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+  <h1 id="title">Delivery Log</h1>
+  <span class="badge" id="roleBadge" hidden></span>
+  <button class="iconbtn" id="btnTheme" aria-label="Switch theme">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/></svg>
+  </button>
+</div>
+
+<main>
+  <!-- boot -->
+  <section id="vBoot"><div class="splash"><div class="spin"></div><p class="muted">Starting…</p></div></section>
+
+  <!-- setup (only if config.js not filled in) -->
+  <section id="vSetup" hidden>
+    <div class="card">
+      <h2>One-time setup</h2>
+      <p class="muted">Paste the <code>firebaseConfig</code> object from your Firebase console (Project settings → Your apps → Config). It is stored on this device only.</p>
+      <label for="cfgJson">Firebase config</label>
+      <textarea id="cfgJson" style="min-height:150px;font-family:ui-monospace,monospace;font-size:12px" placeholder='{ "apiKey": "...", "authDomain": "...", "projectId": "...", "storageBucket": "...", "messagingSenderId": "...", "appId": "..." }'></textarea>
+      <label for="cfgMaster">Master account email</label>
+      <input id="cfgMaster" type="email" placeholder="owner@yourcompany.com" autocomplete="off">
+      <div style="height:14px"></div>
+      <button class="btn" id="cfgSave">Save and start</button>
+    </div>
+  </section>
+
+  <!-- auth -->
+  <section id="vAuth" hidden>
+    <div style="height:18px"></div>
+    <div class="card">
+      <h2 id="authTitle">Sign in</h2>
+      <p class="muted" id="authHint">Use the account your manager created for you.</p>
+      <label for="auName" id="lblName" hidden>Full name</label>
+      <input id="auName" type="text" autocomplete="name" hidden>
+      <label for="auPhone" id="lblPhone" hidden>Phone</label>
+      <input id="auPhone" type="tel" autocomplete="tel" hidden>
+      <label for="auEmail">Email</label>
+      <input id="auEmail" type="email" autocomplete="username" inputmode="email">
+      <label for="auPass">Password</label>
+      <input id="auPass" type="password" autocomplete="current-password">
+      <div style="height:16px"></div>
+      <button class="btn" id="auGo">Sign in</button>
+      <div style="height:9px"></div>
+      <button class="btn alt" id="auSwap">Create an account</button>
+      <p class="tiny" id="auErr" style="color:var(--bad);margin-top:10px" hidden></p>
+    </div>
+  </section>
+
+  <!-- delivery: today -->
+  <section id="vHome" hidden>
+    <div class="grid2" style="margin-top:12px">
+      <div class="stat"><b id="sToday">0</b><span>Uploads today</span></div>
+      <div class="stat"><b id="sTotal">0</b><span>All time</span></div>
+    </div>
+    <button class="btn go" id="goNew" style="margin:12px 0">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      New stock upload
+    </button>
+    <h3 style="margin:18px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)">My uploads</h3>
+    <div id="myFeed"></div>
+  </section>
+
+  <!-- new entry -->
+  <section id="vNew" hidden>
+    <div class="card">
+      <h2>Stock upload</h2>
+      <label>Stock photo <span style="color:var(--bad)">*</span></label>
+      <div id="stockBox">
+        <div class="drop" id="stockDrop">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="width:28px;height:28px;margin:0 auto 7px;display:block"><path d="M4 8.5A2.5 2.5 0 016.5 6h1.2a2 2 0 001.7-1l.5-.8a2 2 0 011.7-1h0.8a2 2 0 011.7 1l.5.8a2 2 0 001.7 1h1.2A2.5 2.5 0 0120 8.5v8A2.5 2.5 0 0117.5 19h-11A2.5 2.5 0 014 16.5v-8z"/><circle cx="12" cy="12.5" r="3.3"/></svg>
+          Take or choose a photo
+          <div class="tiny" style="margin-top:4px">Location is captured with the photo</div>
+        </div>
+      </div>
+      <input id="stockFile" type="file" accept="image/*" capture="environment" hidden>
+
+      <label>Bill photo <span class="tiny" style="text-transform:none;letter-spacing:0">(optional)</span></label>
+      <div id="billBox">
+        <div class="drop" id="billDrop">Add bill / invoice photo</div>
+      </div>
+      <input id="billFile" type="file" accept="image/*" capture="environment" hidden>
+
+      <label for="enShop">Shop / customer name</label>
+      <input id="enShop" type="text" placeholder="e.g. Sharma General Store">
+      <label for="enNotes">Notes</label>
+      <textarea id="enNotes" placeholder="Anything worth recording — quantity, who received it, issues"></textarea>
+
+      <div class="card" style="margin:16px 0 0;background:var(--bg)">
+        <div class="spread">
+          <strong style="font-size:13px">Location</strong>
+          <span class="pill" id="locPill">waiting for photo</span>
+        </div>
+        <div id="locBody" class="tiny" style="margin-top:6px">Captured automatically the moment you add the stock photo.</div>
+      </div>
+
+      <div class="bar" id="upBar" hidden><i></i></div>
+      <div style="height:16px"></div>
+      <button class="btn go" id="enSave">Save upload</button>
+      <div style="height:9px"></div>
+      <button class="btn alt" id="enCancel">Cancel</button>
+    </div>
+  </section>
+
+  <!-- master: all updates -->
+  <section id="vAll" hidden>
+    <div class="grid2" style="margin-top:12px">
+      <div class="stat"><b id="mToday">0</b><span>Uploads today</span></div>
+      <div class="stat"><b id="mPeople">0</b><span>Delivery persons</span></div>
+    </div>
+    <label for="fPerson">Filter</label>
+    <select id="fPerson"><option value="">Everyone</option></select>
+    <div class="tabs" role="group">
+      <button id="fToday" aria-pressed="true">Today</button>
+      <button id="fWeek" aria-pressed="false">7 days</button>
+      <button id="fAll" aria-pressed="false">30 days</button>
+    </div>
+    <div id="allFeed"></div>
+  </section>
+
+  <!-- master: people -->
+  <section id="vPeople" hidden>
+    <h3 style="margin:16px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)">Delivery persons</h3>
+    <div id="peopleList"></div>
+  </section>
+
+  <!-- master: one person -->
+  <section id="vPerson" hidden>
+    <div class="card" id="personCard"></div>
+    <h3 style="margin:16px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)">Their uploads</h3>
+    <div id="personFeed"></div>
+  </section>
+
+  <!-- profile -->
+  <section id="vProfile" hidden>
+    <div class="card">
+      <div class="row">
+        <div class="avatar" id="pfAv">–</div>
+        <div style="flex:1">
+          <strong id="pfName">—</strong>
+          <div class="tiny" id="pfEmail"></div>
+        </div>
+      </div>
+      <label for="pfNameIn">Full name</label>
+      <input id="pfNameIn" type="text">
+      <label for="pfPhoneIn">Phone</label>
+      <input id="pfPhoneIn" type="tel">
+      <label for="pfVehIn">Vehicle / route</label>
+      <input id="pfVehIn" type="text" placeholder="e.g. MH-12 AB 1234 · North route">
+      <div style="height:16px"></div>
+      <button class="btn" id="pfSave">Save profile</button>
+    </div>
+    <div class="card">
+      <div class="spread"><span class="muted">App version</span><strong id="pfVer" class="tiny"></strong></div>
+      <hr>
+      <div class="spread"><span class="muted">Updates</span><button class="btn alt sm" id="pfCheck">Check now</button></div>
+      <hr>
+      <button class="btn alt" id="pfOut">Sign out</button>
+    </div>
+    <div class="card" id="cleanCard" hidden>
+      <strong>Free up space</strong>
+      <p class="muted" style="margin:6px 0 0">Photos take almost all the storage. Removing old ones keeps every
+        entry, location and note — only the pictures go. Nothing is deleted until you confirm.</p>
+      <label for="cleanAge">Remove photos older than</label>
+      <select id="cleanAge">
+        <option value="180">6 months</option>
+        <option value="90" selected>3 months</option>
+        <option value="30">1 month</option>
+      </select>
+      <div style="height:14px"></div>
+      <button class="btn alt" id="cleanGo">Check what can be removed</button>
+      <p class="tiny" id="cleanOut" style="margin-top:9px"></p>
+    </div>
+  </section>
+</main>
+
+<div id="tabbar" hidden></div>
+<div id="updBanner" class="banner" hidden><span style="flex:1" id="updText">A new version is ready.</span><button id="updGo">Reload</button></div>
+<div id="toast" hidden></div>
+
+<script src="config.js"></script>
+<script type="module">
+const APP_VERSION = "1.1.0";
+const $ = s => document.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ls = { get(k){ try{return localStorage.getItem(k)}catch{return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch{} } };
+
+/* ---------- theme ---------- */
+const applyTheme = t => { if(t) document.documentElement.setAttribute('data-theme',t); else document.documentElement.removeAttribute('data-theme'); };
+applyTheme(ls.get('theme'));
+$('#btnTheme').onclick = () => {
+  const cur = document.documentElement.getAttribute('data-theme');
+  const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+  const next = cur ? (cur==='dark'?'light':'dark') : (dark?'light':'dark');
+  applyTheme(next); ls.set('theme', next);
+};
+
+let toastT;
+function toast(msg){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, 2600); }
+
+/* ---------- config ---------- */
+function loadConfig(){
+  const baked = window.APP_CONFIG;
+  if(baked && baked.firebase && !String(baked.firebase.apiKey).startsWith('PASTE')) return baked;
+  const saved = ls.get('appcfg');
+  if(saved){ try{ return JSON.parse(saved) }catch{} }
+  return null;
+}
+let CFG = loadConfig();
+
+const views = ['vBoot','vSetup','vAuth','vHome','vNew','vAll','vPeople','vPerson','vProfile'];
+function show(id, {title, back=false}={}){
+  views.forEach(v => $('#'+v).hidden = (v!==id));
+  if(title) $('#title').textContent = title;
+  $('#btnBack').hidden = !back;
+  scrollTo(0,0);
+}
+
+/* ---------- setup screen ---------- */
+if(!CFG){
+  $('#topbar').hidden = false;
+  show('vSetup', {title:'Setup'});
+  $('#cfgSave').onclick = () => {
+    let fb;
+    try{
+      let raw = $('#cfgJson').value.trim();
+      const b = raw.indexOf('{'), e = raw.lastIndexOf('}');
+      if(b<0||e<0) throw 0;
+      raw = raw.slice(b, e+1);
+      fb = JSON.parse(raw.replace(/([{,]\s*)([A-Za-z_][\w]*)\s*:/g,'$1"$2":').replace(/'/g,'"').replace(/,\s*}/g,'}'));
+    }catch{ return toast('That config could not be read — paste the whole { … } block'); }
+    if(!fb.apiKey || !fb.projectId) return toast('Config is missing apiKey or projectId');
+    const master = $('#cfgMaster').value.trim().toLowerCase();
+    if(!master) return toast('Enter the master account email');
+    ls.set('appcfg', JSON.stringify({firebase:fb, masterEmail:master, companyName:(window.APP_CONFIG?.companyName)||'Delivery Log'}));
+    location.reload();
+  };
+} else {
+  boot().catch(err => { console.error(err); $('#topbar').hidden=false; show('vBoot'); $('#vBoot').innerHTML = '<div class="card"><h2>Could not start</h2><p class="muted">'+esc(err.message||err)+'</p></div>'; });
+}
+
+/* ---------- app ---------- */
+async function boot(){
+  const V = '10.12.2', B = 'https://www.gstatic.com/firebasejs/'+V+'/';
+  const [{initializeApp},
+         {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,onAuthStateChanged},
+         {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,collection,addDoc,query,where,onSnapshot,serverTimestamp,getDocs}] = await Promise.all([
+    import(B+'firebase-app.js'), import(B+'firebase-auth.js'), import(B+'firebase-firestore.js')
+  ]);
+
+  const app = initializeApp(CFG.firebase);
+  const auth = getAuth(app), db = getFirestore(app);
+  const MASTER_EMAIL = String(CFG.masterEmail||'').toLowerCase();
+  document.title = CFG.companyName || 'Delivery Log';
+
+  let me = null, profile = null, unsubs = [];
+  const drop = () => { unsubs.forEach(u=>{try{u()}catch{}}); unsubs = []; };
+  const initials = n => (String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('')||'?').toUpperCase();
+  const mapUrl = (lat,lng) => 'https://www.google.com/maps/search/?api=1&query='+lat+','+lng;
+  const when = ts => { const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null); if(!d) return 'just now';
+    return d.toLocaleString(undefined,{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}); };
+  const dayStart = n => { const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-n); return d; };
+  const tsOf = e => e.createdAt?.toDate ? e.createdAt.toDate() : new Date(0);
+
+  /* ----- auth screen ----- */
+  let mode = 'in';
+  const paint = () => {
+    const up = mode==='up';
+    $('#authTitle').textContent = up ? 'Create account' : 'Sign in';
+    $('#authHint').textContent = up ? 'Sign up with the master email to get the manager view. Any other email becomes a delivery person.' : 'Use the account your manager created for you.';
+    $('#auGo').textContent = up ? 'Create account' : 'Sign in';
+    $('#auSwap').textContent = up ? 'I already have an account' : 'Create an account';
+    for(const id of ['#lblName','#auName','#lblPhone','#auPhone']) $(id).hidden = !up;
+    $('#auPass').autocomplete = up ? 'new-password' : 'current-password';
+    $('#auErr').hidden = true;
+  };
+  paint();
+  $('#auSwap').onclick = () => { mode = mode==='in'?'up':'in'; paint(); };
+  $('#auGo').onclick = async () => {
+    const email = $('#auEmail').value.trim(), pass = $('#auPass').value;
+    if(!email || pass.length < 6) return fail('Enter an email and a password of at least 6 characters.');
+    $('#auGo').disabled = true;
+    try{
+      if(mode==='up'){
+        const name = $('#auName').value.trim();
+        if(!name) { $('#auGo').disabled=false; return fail('Enter your full name.'); }
+        const cred = await createUserWithEmailAndPassword(auth, email, pass);
+        await setDoc(doc(db,'users',cred.user.uid), {
+          name, phone: $('#auPhone').value.trim(), email: email.toLowerCase(), vehicle: '',
+          role: email.toLowerCase()===MASTER_EMAIL ? 'master' : 'delivery',
+          createdAt: serverTimestamp()
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email, pass);
+      }
+    }catch(e){ fail(humanAuthError(e)); }
+    $('#auGo').disabled = false;
+  };
+  function fail(m){ const el=$('#auErr'); el.textContent=m; el.hidden=false; }
+  function humanAuthError(e){
+    const c = String(e?.code||'');
+    if(c.includes('invalid-credential')||c.includes('wrong-password')||c.includes('user-not-found')) return 'Email or password is not right.';
+    if(c.includes('email-already-in-use')) return 'That email already has an account — sign in instead.';
+    if(c.includes('weak-password')) return 'Password needs at least 6 characters.';
+    if(c.includes('network')) return 'No connection. Try again when you are back online.';
+    if(c.includes('operation-not-allowed')) return 'Email sign-in is switched off in Firebase. Turn on Authentication → Email/Password.';
+    return e?.message || 'Something went wrong.';
+  }
+
+  /* ----- tab bar ----- */
+  const TABS = {
+    delivery: [
+      {id:'vHome',    label:'Today',   title:'Today',       path:'M3 10.5L12 4l9 6.5V20a1 1 0 01-1 1h-5v-6H9v6H4a1 1 0 01-1-1v-9.5z'},
+      {id:'vNew',     label:'Upload',  title:'Stock upload',path:'M12 5v14M5 12h14'},
+      {id:'vProfile', label:'Profile', title:'Profile',     path:'M12 11a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5'}
+    ],
+    master: [
+      {id:'vAll',     label:'Updates', title:'All updates',       path:'M4 6h16M4 12h16M4 18h10'},
+      {id:'vPeople',  label:'People',  title:'Delivery persons',  path:'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2 21c0-3.6 3.1-5.8 7-5.8S16 17.4 16 21M17 7.5a3 3 0 110 6M18 21c0-2.6-.8-4.3-2-5.3'},
+      {id:'vProfile', label:'Profile', title:'Profile',           path:'M12 11a4 4 0 100-8 4 4 0 000 8zM4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5'}
+    ]
+  };
+  function buildTabs(role){
+    const bar = $('#tabbar'); bar.innerHTML = '';
+    TABS[role].forEach(t => {
+      const b = document.createElement('button');
+      b.innerHTML = '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="'+t.path+'"/></svg><span>'+t.label+'</span>';
+      b.onclick = () => go(t.id, t.title);
+      b.dataset.view = t.id;
+      bar.appendChild(b);
+    });
+    bar.hidden = false;
+  }
+  function go(id, title){
+    show(id, {title});
+    [...$('#tabbar').children].forEach(b => b.setAttribute('aria-current', b.dataset.view===id ? 'page' : 'false'));
+    if(id==='vNew') resetEntry();
+    if(id==='vProfile') fillProfile();
+  }
+  $('#btnBack').onclick = () => { const t = TABS[profile.role==='master'?'master':'delivery'][0]; go(t.id, t.title); };
+
+  /* ----- entry card ----- */
+  function entryCard(e, withWho){
+    const loc = (typeof e.lat==='number' && typeof e.lng==='number')
+      ? '<a class="maplink" href="'+mapUrl(e.lat,e.lng)+'" target="_blank" rel="noopener">'
+        +'<svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'
+        +'Open in Maps · '+e.lat.toFixed(5)+', '+e.lng.toFixed(5)+'</a>'
+      : '<span class="pill bad">no location</span>';
+    const shots = '<div class="shots">'
+      + (e.stockPhoto ? '<div class="shot"><span class="tag">Stock</span><img data-photo="'+esc(e.stockPhoto)+'" alt="Stock photo'+(e.shop?' at '+esc(e.shop):'')+'"></div>' : '')
+      + (e.billPhoto  ? '<div class="shot"><span class="tag">Bill</span><img data-photo="'+esc(e.billPhoto)+'" alt="Bill photo"></div>' : '')
+      + '</div>';
+    return '<div class="card">'
+      + (withWho ? '<div class="row" style="margin-bottom:9px"><div class="avatar">'+esc(initials(e.userName))+'</div><div style="flex:1"><strong>'+esc(e.userName||'Unknown')+'</strong><div class="tiny">'+esc(when(e.createdAt))+'</div></div></div>'
+                 : '<div class="spread"><strong>'+esc(e.shop||'Stock upload')+'</strong><span class="tiny">'+esc(when(e.createdAt))+'</span></div>')
+      + (withWho && e.shop ? '<strong>'+esc(e.shop)+'</strong>' : '')
+      + (e.notes ? '<p class="muted" style="margin:7px 0 0">'+esc(e.notes)+'</p>' : '')
+      + shots
+      + '<div style="margin-top:9px">'+loc+'</div>'
+      + '</div>';
+  }
+  // Photos live in their own Firestore documents; fetch each once, then reuse.
+  const photoCache = new Map();
+  function photoData(id){
+    if(!photoCache.has(id)) photoCache.set(id, getDoc(doc(db,'photos',id))
+      .then(s => s.exists() ? (s.data().data||'') : '').catch(()=>''));
+    return photoCache.get(id);
+  }
+  async function fillPhotos(root){
+    for(const img of [...root.querySelectorAll('img[data-photo]')]){
+      const id = img.dataset.photo; img.removeAttribute('data-photo');
+      const d = await photoData(id);
+      if(d) img.src = d; else img.closest('.shot')?.classList.add('missing');
+    }
+  }
+  const render = (el, list, withWho, emptyMsg) => {
+    el.innerHTML = list.length ? list.map(e=>entryCard(e,withWho)).join('')
+      : '<div class="feed-empty">'+esc(emptyMsg)+'</div>';
+    fillPhotos(el);
+  };
+
+  /* ----- photo + location ----- */
+  const picked = { stock:null, bill:null };
+  let loc = null;
+
+  // A Firestore document holds 1 MiB, so squeeze each photo under ~700 KB.
+  const MAX_CHARS = 700000;
+  function shrink(file){
+    return new Promise((res,rej) => {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let max = 1280, q = 0.72, out = '';
+        for(let pass = 0; pass < 6; pass++){
+          const s = Math.min(1, max/Math.max(img.width,img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width*s); c.height = Math.round(img.height*s);
+          c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+          out = c.toDataURL('image/jpeg', q);
+          if(out.length <= MAX_CHARS) return res(out);
+          if(q > 0.45) q -= 0.12; else max = Math.round(max*0.8);
+        }
+        out.length <= MAX_CHARS*1.3 ? res(out) : rej(new Error('That photo is too large to save'));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Could not read that image')); };
+      img.src = url;
+    });
+  }
+
+  function grabLocation(){
+    $('#locPill').textContent = 'finding…'; $('#locPill').className = 'pill';
+    $('#locBody').textContent = 'Asking your phone for GPS…';
+    if(!navigator.geolocation){ locFail('This browser has no location support.'); return; }
+    navigator.geolocation.getCurrentPosition(p => {
+      loc = {lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0)};
+      $('#locPill').textContent = '±'+loc.acc+' m'; $('#locPill').className = 'pill ok';
+      $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps · '+loc.lat.toFixed(5)+', '+loc.lng.toFixed(5)+'</a>';
+    }, err => {
+      locFail(err.code===1 ? 'Location permission was denied. Allow it in your browser settings, then retake the photo.'
+            : err.code===3 ? 'GPS timed out. Step outside and retake the photo.'
+            : 'Location is unavailable right now.');
+    }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+  }
+  function locFail(msg){ loc=null; $('#locPill').textContent='not captured'; $('#locPill').className='pill bad'; $('#locBody').textContent = msg; }
+
+  function wirePick(kind, inputSel, boxSel, label){
+    $(inputSel).onchange = async ev => {
+      const f = ev.target.files?.[0]; if(!f) return;
+      try{
+        const url = await shrink(f);
+        picked[kind] = url;
+        $(boxSel).innerHTML = '<div class="shot"><span class="tag">'+label+'</span><img src="'+url+'" alt="'+label+' preview"></div>'
+          + '<button class="btn alt sm" style="margin-top:8px">Retake</button>';
+        $(boxSel).querySelector('button').onclick = () => { $(inputSel).value=''; $(inputSel).click(); };
+        if(kind==='stock') grabLocation();
+      }catch(e){ toast(e.message); }
+      ev.target.value = '';
+    };
+  }
+  wirePick('stock', '#stockFile', '#stockBox', 'Stock');
+  wirePick('bill',  '#billFile',  '#billBox',  'Bill');
+  $('#stockDrop').onclick = () => $('#stockFile').click();
+  $('#billDrop').onclick  = () => $('#billFile').click();
+
+  function resetEntry(){
+    picked.stock = picked.bill = null; loc = null;
+    $('#enShop').value = ''; $('#enNotes').value = '';
+    $('#stockBox').innerHTML = '<div class="drop" id="stockDrop"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="width:28px;height:28px;margin:0 auto 7px;display:block"><path d="M4 8.5A2.5 2.5 0 016.5 6h1.2a2 2 0 001.7-1l.5-.8a2 2 0 011.7-1h0.8a2 2 0 011.7 1l.5.8a2 2 0 001.7 1h1.2A2.5 2.5 0 0120 8.5v8A2.5 2.5 0 0117.5 19h-11A2.5 2.5 0 014 16.5v-8z"/><circle cx="12" cy="12.5" r="3.3"/></svg>Take or choose a photo<div class="tiny" style="margin-top:4px">Location is captured with the photo</div></div>';
+    $('#billBox').innerHTML  = '<div class="drop" id="billDrop">Add bill / invoice photo</div>';
+    $('#stockDrop').onclick = () => $('#stockFile').click();
+    $('#billDrop').onclick  = () => $('#billFile').click();
+    $('#locPill').textContent = 'waiting for photo'; $('#locPill').className = 'pill';
+    $('#locBody').textContent = 'Captured automatically the moment you add the stock photo.';
+    $('#upBar').hidden = true; $('#upBar').firstElementChild.style.width = '0';
+  }
+  $('#enCancel').onclick = () => go('vHome','Today');
+  $('#goNew').onclick = () => go('vNew','Stock upload');
+
+  async function savePhoto(dataUrl){
+    const r = await addDoc(collection(db,'photos'), { uid: me.uid, data: dataUrl, createdAt: serverTimestamp() });
+    return r.id;
+  }
+
+  $('#enSave').onclick = async () => {
+    if(!picked.stock) return toast('A stock photo is required');
+    const btn = $('#enSave'); btn.disabled = true; btn.textContent = 'Uploading…';
+    const bar = $('#upBar'); bar.hidden = false;
+    const setPct = p => bar.firstElementChild.style.width = Math.round(p*100)+'%';
+    try{
+      setPct(0.2);
+      const stockPhoto = await savePhoto(picked.stock);
+      setPct(picked.bill ? 0.55 : 0.8);
+      let billPhoto = '';
+      if(picked.bill) billPhoto = await savePhoto(picked.bill);
+      setPct(0.9);
+      await addDoc(collection(db,'entries'), {
+        uid: me.uid, userName: profile.name || me.email, userEmail: me.email,
+        shop: $('#enShop').value.trim(), notes: $('#enNotes').value.trim(),
+        stockPhoto, billPhoto,
+        lat: loc ? loc.lat : null, lng: loc ? loc.lng : null, accuracy: loc ? loc.acc : null,
+        mapUrl: loc ? mapUrl(loc.lat, loc.lng) : '',
+        appVersion: APP_VERSION, createdAt: serverTimestamp()
+      });
+      setPct(1);
+      toast(loc ? 'Upload saved' : 'Saved — but without a location');
+      resetEntry(); go('vHome','Today');
+    }catch(e){
+      console.error(e);
+      toast(String(e?.code||'').includes('permission') ? 'The security rules rejected this upload.' : 'Upload failed. Check your connection and try again.');
+    }
+    btn.disabled = false; btn.textContent = 'Save upload';
+  };
+
+  /* ----- profile ----- */
+  function fillProfile(){
+    $('#pfAv').textContent = initials(profile.name);
+    $('#pfName').textContent = profile.name || '—';
+    $('#pfEmail').textContent = me.email + (profile.role==='master' ? ' · master' : '');
+    $('#pfNameIn').value = profile.name||''; $('#pfPhoneIn').value = profile.phone||''; $('#pfVehIn').value = profile.vehicle||'';
+    $('#pfVer').textContent = 'v'+APP_VERSION;
+    $('#cleanCard').hidden = profile.role !== 'master';
+    cleanFound = null; $('#cleanOut').textContent = ''; $('#cleanGo').textContent = 'Check what can be removed';
+  }
+
+  // Two taps: the first counts, the second deletes what was counted.
+  let cleanFound = null;
+  $('#cleanAge').onchange = () => {
+    cleanFound = null; $('#cleanOut').textContent = ''; $('#cleanGo').textContent = 'Check what can be removed';
+  };
+  $('#cleanGo').onclick = async () => {
+    const btn = $('#cleanGo'), out = $('#cleanOut');
+    const days = Number($('#cleanAge').value);
+    if(cleanFound === null){
+      btn.disabled = true; out.textContent = 'Checking…';
+      try{
+        const s = await getDocs(query(collection(db,'photos'), where('createdAt','<', dayStart(days))));
+        cleanFound = s.docs.map(d=>d.id);
+        if(!cleanFound.length){
+          out.textContent = 'Nothing is older than that yet.';
+          cleanFound = null; btn.textContent = 'Check what can be removed';
+        } else {
+          const mb = Math.round(cleanFound.length * 0.4);
+          out.textContent = cleanFound.length + ' photo' + (cleanFound.length>1?'s':'') + ' — about ' + mb + ' MB. Tap again to remove them for good.';
+          btn.textContent = 'Remove ' + cleanFound.length + ' photo' + (cleanFound.length>1?'s':'');
+        }
+      }catch(e){ out.textContent = 'Could not check right now.'; }
+      btn.disabled = false;
+      return;
+    }
+    btn.disabled = true; out.textContent = 'Removing…';
+    let done = 0;
+    try{
+      for(let i = 0; i < cleanFound.length; i += 50){
+        await Promise.all(cleanFound.slice(i, i+50).map(id => deleteDoc(doc(db,'photos',id))));
+        done = Math.min(i+50, cleanFound.length);
+        out.textContent = 'Removing… ' + done + ' of ' + cleanFound.length;
+      }
+      out.textContent = 'Removed ' + done + ' photo' + (done>1?'s':'') + '. The entries themselves are untouched.';
+      photoCache.clear();
+    }catch(e){ out.textContent = 'Stopped after ' + done + '. Try again to finish.'; }
+    cleanFound = null; btn.textContent = 'Check what can be removed'; btn.disabled = false;
+  };
+  $('#pfSave').onclick = async () => {
+    const name = $('#pfNameIn').value.trim(); if(!name) return toast('Name cannot be empty');
+    try{
+      await updateDoc(doc(db,'users',me.uid), {name, phone:$('#pfPhoneIn').value.trim(), vehicle:$('#pfVehIn').value.trim()});
+      profile = {...profile, name, phone:$('#pfPhoneIn').value.trim(), vehicle:$('#pfVehIn').value.trim()};
+      fillProfile(); toast('Profile saved');
+    }catch(e){ toast('Could not save — '+(e?.code||e?.message)); }
+  };
+  $('#pfOut').onclick = async () => { drop(); await signOut(auth); };
+  $('#pfCheck').onclick = () => checkUpdate(true);
+
+  /* ----- master views ----- */
+  const WINDOW_DAYS = 30;              // the master feed never loads more than this
+  let allEntries = [], people = [], range = 0;
+  function filtered(){
+    const who = $('#fPerson').value;
+    const from = range<0 ? null : dayStart(range);
+    return allEntries.filter(e => (!who || e.uid===who) && (!from || tsOf(e) >= from));
+  }
+  function paintAll(){
+    render($('#allFeed'), filtered(), true, range===0 ? 'Nothing uploaded today yet.' : 'No uploads in this range.');
+    const t0 = dayStart(0);
+    $('#mToday').textContent = allEntries.filter(e => tsOf(e) >= t0).length;
+    $('#mPeople').textContent = people.filter(p => p.role!=='master').length;
+  }
+  const rangeBtns = {0:'#fToday', 7:'#fWeek', 30:'#fAll'};
+  Object.entries(rangeBtns).forEach(([k,sel]) => $(sel).onclick = () => {
+    range = Number(k);
+    Object.values(rangeBtns).forEach(s => $(s).setAttribute('aria-pressed', s===sel ? 'true':'false'));
+    paintAll();
+  });
+  $('#fPerson').onchange = paintAll;
+
+  function paintPeople(){
+    const list = people.filter(p => p.role!=='master');
+    const sel = $('#fPerson'); const keep = sel.value;
+    sel.innerHTML = '<option value="">Everyone</option>' + list.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.name||p.email)+'</option>').join('');
+    sel.value = keep;
+    $('#peopleList').innerHTML = list.length
+      ? '<p class="tiny" style="margin:10px 0 0">Counts cover the last 30 days. Open a person for their full history.</p>'
+      : '<div class="feed-empty">No delivery persons have signed up yet.</div>';
+    list.forEach(p => {
+      const n = allEntries.filter(e=>e.uid===p.id).length;
+      const last = allEntries.filter(e=>e.uid===p.id).map(tsOf).sort((a,b)=>b-a)[0];
+      const b = document.createElement('button');
+      b.className = 'person';
+      b.innerHTML = '<div class="avatar">'+esc(initials(p.name||p.email))+'</div>'
+        +'<div class="mid"><strong>'+esc(p.name||p.email)+'</strong>'
+        +'<div class="tiny">'+esc(p.phone||p.email)+(p.vehicle?' · '+esc(p.vehicle):'')+'</div></div>'
+        +'<div class="right"><strong style="font-variant-numeric:tabular-nums">'+n+'</strong>'
+        +'<div class="tiny">'+(last && last.getTime() ? esc(when(last)) : 'none in 30 days')+'</div></div>';
+      b.onclick = () => openPerson(p);
+      $('#peopleList').appendChild(b);
+    });
+  }
+  async function openPerson(p){
+    const head = n => '<div class="row"><div class="avatar">'+esc(initials(p.name||p.email))+'</div>'
+      +'<div style="flex:1"><strong>'+esc(p.name||p.email)+'</strong><div class="tiny">'+esc(p.email||'')+'</div></div></div>'
+      +'<hr><div class="spread"><span class="muted">Phone</span><strong>'+esc(p.phone||'—')+'</strong></div>'
+      +'<hr><div class="spread"><span class="muted">Vehicle / route</span><strong>'+esc(p.vehicle||'—')+'</strong></div>'
+      +'<hr><div class="spread"><span class="muted">Total uploads</span><strong>'+n+'</strong></div>';
+    $('#personCard').innerHTML = head('…');
+    $('#personFeed').innerHTML = '<div class="feed-empty">Loading their history…</div>';
+    show('vPerson', {title:p.name||'Delivery person', back:true});
+    try{
+      const s = await getDocs(query(collection(db,'entries'), where('uid','==',p.id)));
+      const mine = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
+      $('#personCard').innerHTML = head(mine.length);
+      render($('#personFeed'), mine, false, 'No uploads from this person yet.');
+    }catch(e){
+      $('#personCard').innerHTML = head('—');
+      $('#personFeed').innerHTML = '<div class="feed-empty">Could not load their history.</div>';
+    }
+  }
+
+  /* ----- auto update ----- */
+  async function checkUpdate(loud){
+    if('serviceWorker' in navigator){
+      try{ const r = await navigator.serviceWorker.getRegistration(); if(r) await r.update(); }catch{}
+    }
+    try{
+      const s = await getDoc(doc(db,'config','app'));
+      if(s.exists()){
+        const d = s.data();
+        if(d.version && d.version !== APP_VERSION){
+          $('#updText').textContent = 'Version '+d.version+' is available.';
+          $('#updGo').textContent = d.apkUrl ? 'Get it' : 'Reload';
+          $('#updGo').onclick = () => d.apkUrl ? open(d.apkUrl,'_blank','noopener') : location.reload();
+          $('#updBanner').hidden = false;
+          return;
+        }
+      }
+      if(loud) toast('You are on the latest version');
+    }catch{ if(loud) toast('Could not check right now'); }
+  }
+
+  /* ----- session ----- */
+  onAuthStateChanged(auth, async u => {
+    drop();
+    if(!u){
+      me = profile = null;
+      $('#tabbar').hidden = true; $('#roleBadge').hidden = true; $('#topbar').hidden = false;
+      show('vAuth', {title: CFG.companyName||'Delivery Log'});
+      return;
+    }
+    me = u;
+    let snap = await getDoc(doc(db,'users',u.uid));
+    if(!snap.exists()){
+      await setDoc(doc(db,'users',u.uid), {
+        name: u.email.split('@')[0], phone:'', email:(u.email||'').toLowerCase(), vehicle:'',
+        role: (u.email||'').toLowerCase()===MASTER_EMAIL ? 'master' : 'delivery', createdAt: serverTimestamp()
+      });
+      snap = await getDoc(doc(db,'users',u.uid));
+    }
+    profile = snap.data();
+    $('#topbar').hidden = false;
+    $('#roleBadge').hidden = false;
+    $('#roleBadge').textContent = profile.role==='master' ? 'Master' : 'Delivery';
+
+    if(profile.role==='master'){
+      buildTabs('master'); go('vAll','All updates');
+      unsubs.push(onSnapshot(query(collection(db,'entries'), where('createdAt','>=', dayStart(WINDOW_DAYS))), s => {
+        allEntries = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
+        paintAll(); paintPeople();
+      }, e => toast('Could not load updates — '+(e.code||e.message))));
+      unsubs.push(onSnapshot(collection(db,'users'), s => {
+        people = s.docs.map(d=>({id:d.id, ...d.data()}));
+        paintPeople(); paintAll();
+      }, ()=>{}));
+    } else {
+      buildTabs('delivery'); go('vHome','Today');
+      unsubs.push(onSnapshot(query(collection(db,'entries'), where('uid','==',u.uid)), s => {
+        const mine = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
+        const t0 = dayStart(0);
+        $('#sToday').textContent = mine.filter(e=>tsOf(e)>=t0).length;
+        $('#sTotal').textContent = mine.length;
+        render($('#myFeed'), mine, false, 'No uploads yet. Tap “New stock upload”.');
+      }, e => toast('Could not load your uploads — '+(e.code||e.message))));
+    }
+    checkUpdate(false);
+  });
+}
+
+/* ---------- service worker + update banner ---------- */
+if('serviceWorker' in navigator){
+  addEventListener('load', async () => {
+    try{
+      const reg = await navigator.serviceWorker.register('sw.js');
+      const offer = w => {
+        $('#updText').textContent = 'A new version is ready.';
+        $('#updGo').textContent = 'Reload';
+        $('#updGo').onclick = () => { w.postMessage({type:'SKIP_WAITING'}); };
+        $('#updBanner').hidden = false;
+      };
+      if(reg.waiting) offer(reg.waiting);
+      reg.addEventListener('updatefound', () => {
+        const w = reg.installing;
+        w && w.addEventListener('statechange', () => { if(w.state==='installed' && navigator.serviceWorker.controller) offer(w); });
+      });
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if(!reloaded){ reloaded = true; location.reload(); } });
+      setInterval(() => reg.update().catch(()=>{}), 30*60*1000);
+      document.addEventListener('visibilitychange', () => { if(!document.hidden) reg.update().catch(()=>{}); });
+    }catch(e){ console.warn('sw', e); }
+  });
+}
+</script>
+</body>
+</html>
