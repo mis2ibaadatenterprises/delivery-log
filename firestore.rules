@@ -3,27 +3,36 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn()  { return request.auth != null; }
-    function isMaster()  {
-      return signedIn() &&
+    // No profile document = no access. Profiles are only created by the master,
+    // so an account made outside the app can sign in but can do nothing at all.
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+    function isMaster() {
+      return hasProfile() &&
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'master';
     }
 
-    // Profiles: you read and edit your own; the master reads and edits everyone's.
     match /users/{uid} {
       allow read:   if signedIn() && (request.auth.uid == uid || isMaster());
-      allow create: if signedIn() && request.auth.uid == uid;
+      allow create: if isMaster();
       allow update: if signedIn() && (request.auth.uid == uid || isMaster());
       allow delete: if isMaster();
     }
 
-    // Uploads: a delivery person creates and reads their own; the master sees all.
     match /entries/{id} {
-      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow create: if hasProfile() && request.resource.data.uid == request.auth.uid;
       allow read:   if signedIn() && (resource.data.uid == request.auth.uid || isMaster());
       allow update, delete: if isMaster();
     }
 
-    // Version doc the app checks for updates. Master writes it, everyone reads it.
+    match /photos/{id} {
+      allow create: if hasProfile() && request.resource.data.uid == request.auth.uid;
+      allow read:   if hasProfile();
+      allow update: if false;
+      allow delete: if isMaster();
+    }
+
     match /config/{docId} {
       allow read:  if signedIn();
       allow write: if isMaster();

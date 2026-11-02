@@ -156,19 +156,14 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div style="height:18px"></div>
     <div class="card">
       <h2 id="authTitle">Sign in</h2>
-      <p class="muted" id="authHint">Use the account your manager created for you.</p>
-      <label for="auName" id="lblName" hidden>Full name</label>
-      <input id="auName" type="text" autocomplete="name" hidden>
-      <label for="auPhone" id="lblPhone" hidden>Phone</label>
-      <input id="auPhone" type="tel" autocomplete="tel" hidden>
-      <label for="auEmail">Email</label>
-      <input id="auEmail" type="email" autocomplete="username" inputmode="email">
+      <p class="muted" id="authHint">Use the username and password your manager gave you.</p>
+      <label for="auEmail">Username</label>
+      <input id="auEmail" type="text" autocomplete="username" autocapitalize="none" spellcheck="false">
       <label for="auPass">Password</label>
       <input id="auPass" type="password" autocomplete="current-password">
       <div style="height:16px"></div>
       <button class="btn" id="auGo">Sign in</button>
-      <div style="height:9px"></div>
-      <button class="btn alt" id="auSwap">Create an account</button>
+      <p class="tiny" style="margin-top:12px">Accounts are created by your manager. There is no public sign-up.</p>
       <p class="tiny" id="auErr" style="color:var(--bad);margin-top:10px" hidden></p>
     </div>
   </section>
@@ -239,15 +234,46 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
     <div class="tabs" role="group">
       <button id="fToday" aria-pressed="true">Today</button>
       <button id="fWeek" aria-pressed="false">7 days</button>
-      <button id="fAll" aria-pressed="false">30 days</button>
+      <button id="f30" aria-pressed="false">30 days</button>
+      <button id="fAll" aria-pressed="false">All</button>
     </div>
+    <p class="tiny" id="mLabel" style="margin:0 0 4px"></p>
     <div id="allFeed"></div>
   </section>
 
   <!-- master: people -->
   <section id="vPeople" hidden>
-    <h3 style="margin:16px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)">Delivery persons</h3>
+    <button class="btn go" id="goAdd" style="margin:14px 0 4px">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      Add a delivery person
+    </button>
+    <h3 style="margin:18px 0 0;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)">Delivery persons</h3>
     <div id="peopleList"></div>
+  </section>
+
+  <!-- master: add a delivery person -->
+  <section id="vAdd" hidden>
+    <div class="card">
+      <h2>Add a delivery person</h2>
+      <p class="muted" style="margin:6px 0 0">Pick a username and password for them, then pass it on.
+        They sign in with exactly these — no email, no sign-up.</p>
+      <label for="adName">Full name</label>
+      <input id="adName" type="text" autocomplete="off">
+      <label for="adUser">Username</label>
+      <input id="adUser" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="raj">
+      <p class="tiny" style="margin:5px 0 0">Letters, numbers, dots and underscores. No spaces.</p>
+      <label for="adPass">Password</label>
+      <input id="adPass" type="text" autocomplete="off" placeholder="at least 6 characters">
+      <label for="adPhone">Phone</label>
+      <input id="adPhone" type="tel" autocomplete="off">
+      <label for="adVeh">Vehicle / route</label>
+      <input id="adVeh" type="text" autocomplete="off" placeholder="MH-12 AB 1234 · North route">
+      <div style="height:16px"></div>
+      <button class="btn go" id="adGo">Create account</button>
+      <div style="height:9px"></div>
+      <button class="btn alt" id="adCancel">Cancel</button>
+      <p class="tiny" id="adOut" style="margin-top:10px"></p>
+    </div>
   </section>
 
   <!-- master: one person -->
@@ -283,6 +309,14 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
       <hr>
       <button class="btn alt" id="pfOut">Sign out</button>
     </div>
+    <div class="card">
+      <strong>Change your password</strong>
+      <label for="pwNew">New password</label>
+      <input id="pwNew" type="password" autocomplete="new-password" placeholder="at least 6 characters">
+      <div style="height:12px"></div>
+      <button class="btn alt" id="pwGo">Update password</button>
+      <p class="tiny" id="pwOut" style="margin-top:9px"></p>
+    </div>
     <div class="card" id="cleanCard" hidden>
       <strong>Free up space</strong>
       <p class="muted" style="margin:6px 0 0">Photos take almost all the storage. Removing old ones keeps every
@@ -306,7 +340,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 <script src="config.js"></script>
 <script type="module">
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 const $ = s => document.querySelector(s);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls = { get(k){ try{return localStorage.getItem(k)}catch{return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch{} } };
@@ -334,7 +368,7 @@ function loadConfig(){
 }
 let CFG = loadConfig();
 
-const views = ['vBoot','vSetup','vAuth','vHome','vNew','vAll','vPeople','vPerson','vProfile'];
+const views = ['vBoot','vSetup','vAuth','vHome','vNew','vAll','vPeople','vAdd','vPerson','vProfile'];
 function show(id, {title, back=false}={}){
   views.forEach(v => $('#'+v).hidden = (v!==id));
   if(title) $('#title').textContent = title;
@@ -369,7 +403,7 @@ if(!CFG){
 async function boot(){
   const V = '10.12.2', B = 'https://www.gstatic.com/firebasejs/'+V+'/';
   const [{initializeApp},
-         {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut,onAuthStateChanged},
+         {getAuth,signInWithEmailAndPassword,createUserWithEmailAndPassword,updatePassword,signOut,onAuthStateChanged},
          {getFirestore,doc,setDoc,getDoc,updateDoc,deleteDoc,collection,addDoc,query,where,onSnapshot,serverTimestamp,getDocs}] = await Promise.all([
     import(B+'firebase-app.js'), import(B+'firebase-auth.js'), import(B+'firebase-firestore.js')
   ]);
@@ -377,6 +411,10 @@ async function boot(){
   const app = initializeApp(CFG.firebase);
   const auth = getAuth(app), db = getFirestore(app);
   const MASTER_EMAIL = String(CFG.masterEmail||'').toLowerCase();
+  // Firebase needs an email address; delivery persons only ever see a username.
+  const UDOMAIN = '@delivery-log.local';
+  const toEmail = u => { u = String(u||'').trim().toLowerCase(); return u.includes('@') ? u : u.replace(/\s+/g,'') + UDOMAIN; };
+  const toUser  = e => String(e||'').endsWith(UDOMAIN) ? String(e).slice(0, -UDOMAIN.length) : String(e||'');
   document.title = CFG.companyName || 'Delivery Log';
 
   let me = null, profile = null, unsubs = [];
@@ -389,44 +427,19 @@ async function boot(){
   const tsOf = e => e.createdAt?.toDate ? e.createdAt.toDate() : new Date(0);
 
   /* ----- auth screen ----- */
-  let mode = 'in';
-  const paint = () => {
-    const up = mode==='up';
-    $('#authTitle').textContent = up ? 'Create account' : 'Sign in';
-    $('#authHint').textContent = up ? 'Sign up with the master email to get the manager view. Any other email becomes a delivery person.' : 'Use the account your manager created for you.';
-    $('#auGo').textContent = up ? 'Create account' : 'Sign in';
-    $('#auSwap').textContent = up ? 'I already have an account' : 'Create an account';
-    for(const id of ['#lblName','#auName','#lblPhone','#auPhone']) $(id).hidden = !up;
-    $('#auPass').autocomplete = up ? 'new-password' : 'current-password';
-    $('#auErr').hidden = true;
-  };
-  paint();
-  $('#auSwap').onclick = () => { mode = mode==='in'?'up':'in'; paint(); };
   $('#auGo').onclick = async () => {
-    const email = $('#auEmail').value.trim(), pass = $('#auPass').value;
-    if(!email || pass.length < 6) return fail('Enter an email and a password of at least 6 characters.');
+    const who = $('#auEmail').value.trim(), pass = $('#auPass').value;
+    if(!who || !pass) return fail('Enter your username and password.');
     $('#auGo').disabled = true;
-    try{
-      if(mode==='up'){
-        const name = $('#auName').value.trim();
-        if(!name) { $('#auGo').disabled=false; return fail('Enter your full name.'); }
-        const cred = await createUserWithEmailAndPassword(auth, email, pass);
-        await setDoc(doc(db,'users',cred.user.uid), {
-          name, phone: $('#auPhone').value.trim(), email: email.toLowerCase(), vehicle: '',
-          role: email.toLowerCase()===MASTER_EMAIL ? 'master' : 'delivery',
-          createdAt: serverTimestamp()
-        });
-      } else {
-        await signInWithEmailAndPassword(auth, email, pass);
-      }
-    }catch(e){ fail(humanAuthError(e)); }
+    try{ await signInWithEmailAndPassword(auth, toEmail(who), pass); }
+    catch(e){ fail(humanAuthError(e)); }
     $('#auGo').disabled = false;
   };
   function fail(m){ const el=$('#auErr'); el.textContent=m; el.hidden=false; }
   function humanAuthError(e){
     const c = String(e?.code||'');
-    if(c.includes('invalid-credential')||c.includes('wrong-password')||c.includes('user-not-found')) return 'Email or password is not right.';
-    if(c.includes('email-already-in-use')) return 'That email already has an account — sign in instead.';
+    if(c.includes('invalid-credential')||c.includes('wrong-password')||c.includes('user-not-found')) return 'That username and password do not match an account.';
+    if(c.includes('email-already-in-use')) return 'That username is already taken — pick another.';
     if(c.includes('weak-password')) return 'Password needs at least 6 characters.';
     if(c.includes('network')) return 'No connection. Try again when you are back online.';
     if(c.includes('operation-not-allowed')) return 'Email sign-in is switched off in Firebase. Turn on Authentication → Email/Password.';
@@ -621,7 +634,7 @@ async function boot(){
   function fillProfile(){
     $('#pfAv').textContent = initials(profile.name);
     $('#pfName').textContent = profile.name || '—';
-    $('#pfEmail').textContent = me.email + (profile.role==='master' ? ' · master' : '');
+    $('#pfEmail').textContent = (profile.username || toUser(me.email)) + (profile.role==='master' ? ' · master' : '');
     $('#pfNameIn').value = profile.name||''; $('#pfPhoneIn').value = profile.phone||''; $('#pfVehIn').value = profile.vehicle||'';
     $('#pfVer').textContent = 'v'+APP_VERSION;
     $('#cleanCard').hidden = profile.role !== 'master';
@@ -678,23 +691,36 @@ async function boot(){
   $('#pfCheck').onclick = () => checkUpdate(true);
 
   /* ----- master views ----- */
-  const WINDOW_DAYS = 30;              // the master feed never loads more than this
-  let allEntries = [], people = [], range = 0;
+  const WINDOW_DAYS = 30;        // the live feed stays bounded; "All" loads on demand
+  let allEntries = [], people = [], range = 0, archive = null;
   function filtered(){
     const who = $('#fPerson').value;
-    const from = range<0 ? null : dayStart(range);
-    return allEntries.filter(e => (!who || e.uid===who) && (!from || tsOf(e) >= from));
+    if(range < 0) return (archive||[]).filter(e => !who || e.uid===who);
+    const from = dayStart(range);
+    return allEntries.filter(e => (!who || e.uid===who) && tsOf(e) >= from);
+  }
+  async function loadArchive(){
+    if(archive) return;
+    const s = await getDocs(collection(db,'entries'));
+    archive = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
   }
   function paintAll(){
     render($('#allFeed'), filtered(), true, range===0 ? 'Nothing uploaded today yet.' : 'No uploads in this range.');
+    $('#mLabel').textContent = range<0 ? 'Everything ever uploaded is shown.'
+      : 'Showing the last '+(range||1)+' day'+((range||1)>1?'s':'')+'. Tap All for the full history.';
     const t0 = dayStart(0);
     $('#mToday').textContent = allEntries.filter(e => tsOf(e) >= t0).length;
     $('#mPeople').textContent = people.filter(p => p.role!=='master').length;
   }
-  const rangeBtns = {0:'#fToday', 7:'#fWeek', 30:'#fAll'};
-  Object.entries(rangeBtns).forEach(([k,sel]) => $(sel).onclick = () => {
+  const rangeBtns = {0:'#fToday', 7:'#fWeek', 30:'#f30', '-1':'#fAll'};
+  Object.entries(rangeBtns).forEach(([k,sel]) => $(sel).onclick = async () => {
     range = Number(k);
     Object.values(rangeBtns).forEach(s => $(s).setAttribute('aria-pressed', s===sel ? 'true':'false'));
+    if(range < 0 && !archive){
+      $('#allFeed').innerHTML = '<div class="feed-empty">Loading the full history…</div>';
+      try{ await loadArchive(); }
+      catch(e){ $('#allFeed').innerHTML = '<div class="feed-empty">Could not load the full history.</div>'; return; }
+    }
     paintAll();
   });
   $('#fPerson').onchange = paintAll;
@@ -714,7 +740,7 @@ async function boot(){
       b.className = 'person';
       b.innerHTML = '<div class="avatar">'+esc(initials(p.name||p.email))+'</div>'
         +'<div class="mid"><strong>'+esc(p.name||p.email)+'</strong>'
-        +'<div class="tiny">'+esc(p.phone||p.email)+(p.vehicle?' · '+esc(p.vehicle):'')+'</div></div>'
+        +'<div class="tiny">'+esc(p.username||toUser(p.email))+(p.phone?' · '+esc(p.phone):'')+'</div></div>'
         +'<div class="right"><strong style="font-variant-numeric:tabular-nums">'+n+'</strong>'
         +'<div class="tiny">'+(last && last.getTime() ? esc(when(last)) : 'none in 30 days')+'</div></div>';
       b.onclick = () => openPerson(p);
@@ -724,9 +750,12 @@ async function boot(){
   async function openPerson(p){
     const head = n => '<div class="row"><div class="avatar">'+esc(initials(p.name||p.email))+'</div>'
       +'<div style="flex:1"><strong>'+esc(p.name||p.email)+'</strong><div class="tiny">'+esc(p.email||'')+'</div></div></div>'
+      +'<hr><div class="spread"><span class="muted">Username</span><strong>'+esc(p.username||toUser(p.email))+'</strong></div>'
       +'<hr><div class="spread"><span class="muted">Phone</span><strong>'+esc(p.phone||'—')+'</strong></div>'
       +'<hr><div class="spread"><span class="muted">Vehicle / route</span><strong>'+esc(p.vehicle||'—')+'</strong></div>'
-      +'<hr><div class="spread"><span class="muted">Total uploads</span><strong>'+n+'</strong></div>';
+      +'<hr><div class="spread"><span class="muted">Total uploads</span><strong>'+n+'</strong></div>'
+      +'<hr><button class="btn alt" id="revoke">Remove access</button>'
+      +'<p class="tiny" id="revokeOut" style="margin-top:8px"></p>';
     $('#personCard').innerHTML = head('…');
     $('#personFeed').innerHTML = '<div class="feed-empty">Loading their history…</div>';
     show('vPerson', {title:p.name||'Delivery person', back:true});
@@ -734,12 +763,85 @@ async function boot(){
       const s = await getDocs(query(collection(db,'entries'), where('uid','==',p.id)));
       const mine = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
       $('#personCard').innerHTML = head(mine.length);
+      wireRevoke(p);
       render($('#personFeed'), mine, false, 'No uploads from this person yet.');
     }catch(e){
       $('#personCard').innerHTML = head('—');
       $('#personFeed').innerHTML = '<div class="feed-empty">Could not load their history.</div>';
     }
   }
+
+  // Removing the profile blocks the account: no profile, no sign-in, no writes.
+  function wireRevoke(p){
+    const btn = $('#revoke'), out = $('#revokeOut');
+    if(!btn) return;
+    let armed = false;
+    btn.onclick = async () => {
+      if(!armed){
+        armed = true;
+        btn.textContent = 'Yes, remove ' + (p.name||p.username||'them');
+        out.textContent = 'They will be signed out and cannot sign in again. Their past uploads are kept.';
+        return;
+      }
+      btn.disabled = true; out.textContent = 'Removing…';
+      try{
+        await deleteDoc(doc(db,'users',p.id));
+        out.textContent = 'Access removed.';
+        btn.textContent = 'Removed';
+      }catch(e){ out.textContent = 'Could not remove — ' + (e?.code||e?.message); btn.disabled = false; }
+    };
+  }
+
+  /* ----- creating delivery persons (master only) ----- */
+  $('#goAdd').onclick = () => {
+    ['#adName','#adUser','#adPass','#adPhone','#adVeh'].forEach(id => $(id).value = '');
+    $('#adOut').textContent = '';
+    show('vAdd', {title:'Add a delivery person', back:true});
+  };
+  $('#adCancel').onclick = () => go('vPeople','Delivery persons');
+  $('#adGo').onclick = async () => {
+    const name = $('#adName').value.trim();
+    const user = $('#adUser').value.trim().toLowerCase();
+    const pass = $('#adPass').value;
+    const out = $('#adOut'), btn = $('#adGo');
+    if(!name) return out.textContent = 'Enter their full name.';
+    if(!/^[a-z0-9._]{3,}$/.test(user)) return out.textContent = 'Username: at least 3 characters, letters, numbers, dots or underscores only.';
+    if(pass.length < 6) return out.textContent = 'Password needs at least 6 characters.';
+    btn.disabled = true; out.textContent = 'Creating the account…';
+    let second;
+    try{
+      // A second Firebase app so creating their login does not sign the master out.
+      second = initializeApp(CFG.firebase, 'provision-' + Date.now());
+      const secAuth = getAuth(second);
+      const cred = await createUserWithEmailAndPassword(secAuth, toEmail(user), pass);
+      await setDoc(doc(db,'users',cred.user.uid), {
+        name, username: user, email: toEmail(user),
+        phone: $('#adPhone').value.trim(), vehicle: $('#adVeh').value.trim(),
+        role: 'delivery', createdAt: serverTimestamp()
+      });
+      await signOut(secAuth);
+      out.textContent = 'Done. Give them the username "' + user + '" and the password you chose.';
+      $('#adName').value = $('#adUser').value = $('#adPass').value = $('#adPhone').value = $('#adVeh').value = '';
+    }catch(e){
+      out.textContent = humanAuthError(e);
+      try{ if(second) await signOut(getAuth(second)); }catch{}
+    }
+    btn.disabled = false;
+  };
+
+  /* ----- change own password ----- */
+  $('#pwGo').onclick = async () => {
+    const v = $('#pwNew').value, out = $('#pwOut');
+    if(v.length < 6) return out.textContent = 'At least 6 characters.';
+    $('#pwGo').disabled = true; out.textContent = 'Updating…';
+    try{ await updatePassword(me, v); out.textContent = 'Password updated.'; $('#pwNew').value=''; }
+    catch(e){
+      out.textContent = String(e?.code||'').includes('recent-login')
+        ? 'For safety this needs a fresh sign-in. Sign out, sign back in, then try again.'
+        : (e?.message || 'Could not update the password.');
+    }
+    $('#pwGo').disabled = false;
+  };
 
   /* ----- auto update ----- */
   async function checkUpdate(loud){
@@ -772,13 +874,15 @@ async function boot(){
       return;
     }
     me = u;
-    let snap = await getDoc(doc(db,'users',u.uid));
-    if(!snap.exists()){
-      await setDoc(doc(db,'users',u.uid), {
-        name: u.email.split('@')[0], phone:'', email:(u.email||'').toLowerCase(), vehicle:'',
-        role: (u.email||'').toLowerCase()===MASTER_EMAIL ? 'master' : 'delivery', createdAt: serverTimestamp()
-      });
-      snap = await getDoc(doc(db,'users',u.uid));
+    let snap;
+    try{ snap = await getDoc(doc(db,'users',u.uid)); }catch(e){ snap = null; }
+    if(!snap || !snap.exists()){
+      // No profile means no access — accounts are only ever created by the master.
+      await signOut(auth);
+      $('#topbar').hidden = false;
+      show('vAuth', {title: CFG.companyName||'Delivery Log'});
+      const el = $('#auErr'); el.textContent = 'This account has no access. Ask your manager to set one up.'; el.hidden = false;
+      return;
     }
     profile = snap.data();
     $('#topbar').hidden = false;

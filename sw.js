@@ -1,6 +1,6 @@
 // Bump CACHE on every release. Old caches are deleted on activate,
 // so devices pick up the new build the next time they open the app.
-const CACHE = 'delivery-log-v1.1.0';
+const CACHE = 'delivery-log-v1.2.0';
 const SHELL = ['./', './index.html', './config.js', './manifest.json',
                './icon-192.png', './icon-512.png'];
 
