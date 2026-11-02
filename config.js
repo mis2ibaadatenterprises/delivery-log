@@ -11,9 +11,14 @@ window.APP_CONFIG = {
     appId:             "1:230835639968:web:e354d651cd73a876cedbc5"
   },
 
-  // The ONE account that sees every delivery person. Sign up with this
-  // email in the app and it becomes the master automatically.
-    masterEmail: "mis2ibaadatenterprises@gmail.com",
+  // Accounts allowed to hold the master role. A role is still set per account
+  // in Firestore — this list is the safety net, not the switch.
+  masterEmails: [
+    "mis2ibaadatenterprises@gmail.com",
+    "ibaadat.acc@gmail.com",
+    "kanikmadan@gmail.com",
+    "kanik958@gmail.com"
+  ],
 
   companyName: "Delivery Log"
 };

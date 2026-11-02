@@ -81,6 +81,10 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-vis
 .pill.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button.del{background:none;border:1px solid var(--line);color:var(--fg-faint);font-size:12px;font-weight:650;
+  padding:6px 11px;border-radius:9px;cursor:pointer;flex:none}
+button.del.arm{border-color:var(--bad);color:var(--bad)}
+button.del:disabled{opacity:.6}
 .shot.missing::after{content:"photo unavailable";position:absolute;inset:0;display:grid;place-items:center;font-size:12px;color:var(--fg-faint)}
 .shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin-top:11px}
 .shot{position:relative;border-radius:11px;overflow:hidden;background:var(--surface-2);aspect-ratio:4/3;max-width:100%;max-height:250px}
@@ -89,7 +93,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   background:rgba(0,0,0,.62);color:#fff;padding:3px 7px;border-radius:6px}
 .drop{border:1.5px dashed var(--line);border-radius:11px;padding:20px 14px;text-align:center;color:var(--fg-dim);cursor:pointer;background:var(--bg)}
 .drop:active{border-color:var(--accent)}
-.maplink{display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:13px;color:var(--accent);text-decoration:none;
+.maplink{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px 6px;font-weight:600;font-size:13px;color:var(--accent);text-decoration:none;
   background:color-mix(in srgb,var(--accent) 11%,transparent);padding:7px 11px;border-radius:9px;margin-top:4px}
 .feed-empty{text-align:center;padding:48px 16px;color:var(--fg-faint)}
 .avatar{width:38px;height:38px;border-radius:50%;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;
@@ -254,14 +258,20 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
   <!-- master: add a delivery person -->
   <section id="vAdd" hidden>
     <div class="card">
-      <h2>Add a delivery person</h2>
+      <h2>Add an account</h2>
       <p class="muted" style="margin:6px 0 0">Pick a username and password for them, then pass it on.
         They sign in with exactly these — no email, no sign-up.</p>
+      <label for="adRole">Account type</label>
+      <select id="adRole">
+        <option value="delivery">Delivery person — sees only their own uploads</option>
+        <option value="master">Manager — sees everyone, like you</option>
+      </select>
       <label for="adName">Full name</label>
       <input id="adName" type="text" autocomplete="off">
       <label for="adUser">Username</label>
-      <input id="adUser" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="raj">
-      <p class="tiny" style="margin:5px 0 0">Letters, numbers, dots and underscores. No spaces.</p>
+      <input id="adUser" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="raj" list="masterOpts">
+      <datalist id="masterOpts"></datalist>
+      <p class="tiny" id="adUserHint" style="margin:5px 0 0">Letters, numbers, dots and underscores. No spaces.</p>
       <label for="adPass">Password</label>
       <input id="adPass" type="text" autocomplete="off" placeholder="at least 6 characters">
       <label for="adPhone">Phone</label>
@@ -321,11 +331,14 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
       <strong>Free up space</strong>
       <p class="muted" style="margin:6px 0 0">Photos take almost all the storage. Removing old ones keeps every
         entry, location and note — only the pictures go. Nothing is deleted until you confirm.</p>
-      <label for="cleanAge">Remove photos older than</label>
+      <label for="cleanAge">Remove photos</label>
       <select id="cleanAge">
         <option value="180">6 months</option>
         <option value="90" selected>3 months</option>
         <option value="30">1 month</option>
+        <option value="7">1 week</option>
+        <option value="1">1 day</option>
+        <option value="all">Any age — every photo, including today's</option>
       </select>
       <div style="height:14px"></div>
       <button class="btn alt" id="cleanGo">Check what can be removed</button>
@@ -340,7 +353,7 @@ hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 <script src="config.js"></script>
 <script type="module">
-const APP_VERSION = "1.2.0";
+const APP_VERSION = "1.3.0";
 const $ = s => document.querySelector(s);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls = { get(k){ try{return localStorage.getItem(k)}catch{return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch{} } };
@@ -410,8 +423,10 @@ async function boot(){
 
   const app = initializeApp(CFG.firebase);
   const auth = getAuth(app), db = getFirestore(app);
-  const MASTER_EMAIL = String(CFG.masterEmail||'').toLowerCase();
   // Firebase needs an email address; delivery persons only ever see a username.
+  // Emails listed in config.js as managers — offered as suggestions on the add form.
+  const MASTER_EMAILS = (CFG.masterEmails || (CFG.masterEmail ? [CFG.masterEmail] : []))
+    .filter(Boolean).map(e => String(e).toLowerCase());
   const UDOMAIN = '@delivery-log.local';
   const toEmail = u => { u = String(u||'').trim().toLowerCase(); return u.includes('@') ? u : u.replace(/\s+/g,'') + UDOMAIN; };
   const toUser  = e => String(e||'').endsWith(UDOMAIN) ? String(e).slice(0, -UDOMAIN.length) : String(e||'');
@@ -421,6 +436,26 @@ async function boot(){
   const drop = () => { unsubs.forEach(u=>{try{u()}catch{}}); unsubs = []; };
   const initials = n => (String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('')||'?').toUpperCase();
   const mapUrl = (lat,lng) => 'https://www.google.com/maps/search/?api=1&query='+lat+','+lng;
+
+  // Coordinates -> a readable place, via OpenStreetMap's free reverse geocoder.
+  const placeCache = new Map();
+  function placeName(lat, lng){
+    const key = lat.toFixed(4)+','+lng.toFixed(4);
+    if(!placeCache.has(key)) placeCache.set(key, (async () => {
+      try{
+        const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&addressdetails=1&lat='+lat+'&lon='+lng,
+          { headers: { Accept:'application/json' } });
+        if(!r.ok) return '';
+        const j = await r.json(), a = j.address || {};
+        const near = a.neighbourhood || a.suburb || a.quarter || a.village || a.hamlet || a.road || '';
+        const town = a.city || a.town || a.municipality || a.county || '';
+        const parts = [near, town].filter(Boolean);
+        return parts.length ? parts.join(', ')
+          : String(j.display_name||'').split(',').slice(0,2).join(',').trim();
+      }catch{ return ''; }
+    })());
+    return placeCache.get(key);
+  }
   const when = ts => { const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : null); if(!d) return 'just now';
     return d.toLocaleString(undefined,{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}); };
   const dayStart = n => { const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-n); return d; };
@@ -479,11 +514,12 @@ async function boot(){
   $('#btnBack').onclick = () => { const t = TABS[profile.role==='master'?'master':'delivery'][0]; go(t.id, t.title); };
 
   /* ----- entry card ----- */
-  function entryCard(e, withWho){
+  function entryCard(e, withWho, canDelete){
     const loc = (typeof e.lat==='number' && typeof e.lng==='number')
       ? '<a class="maplink" href="'+mapUrl(e.lat,e.lng)+'" target="_blank" rel="noopener">'
         +'<svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'
-        +'Open in Maps · '+e.lat.toFixed(5)+', '+e.lng.toFixed(5)+'</a>'
+        +'Open in Maps<span class="place" data-lat="'+e.lat+'" data-lng="'+e.lng+'">'+(e.place ? ' · '+esc(e.place) : '')+'</span>'
+        +' · '+e.lat.toFixed(5)+', '+e.lng.toFixed(5)+'</a>'
       : '<span class="pill bad">no location</span>';
     const shots = '<div class="shots">'
       + (e.stockPhoto ? '<div class="shot"><span class="tag">Stock</span><img data-photo="'+esc(e.stockPhoto)+'" alt="Stock photo'+(e.shop?' at '+esc(e.shop):'')+'"></div>' : '')
@@ -495,8 +531,9 @@ async function boot(){
       + (withWho && e.shop ? '<strong>'+esc(e.shop)+'</strong>' : '')
       + (e.notes ? '<p class="muted" style="margin:7px 0 0">'+esc(e.notes)+'</p>' : '')
       + shots
-      + '<div style="margin-top:9px">'+loc+'</div>'
-      + '</div>';
+      + '<div class="spread" style="margin-top:9px"><span>'+loc+'</span>'
+      + (canDelete ? '<button class="del" data-entry="'+esc(e.id)+'" data-stock="'+esc(e.stockPhoto||'')+'" data-bill="'+esc(e.billPhoto||'')+'">Delete</button>' : '')
+      + '</div></div>';
   }
   // Photos live in their own Firestore documents; fetch each once, then reuse.
   const photoCache = new Map();
@@ -512,11 +549,56 @@ async function boot(){
       if(d) img.src = d; else img.closest('.shot')?.classList.add('missing');
     }
   }
-  const render = (el, list, withWho, emptyMsg) => {
-    el.innerHTML = list.length ? list.map(e=>entryCard(e,withWho)).join('')
+  const render = (el, list, withWho, emptyMsg, canDelete) => {
+    el.innerHTML = list.length ? list.map(e=>entryCard(e,withWho,canDelete)).join('')
       : '<div class="feed-empty">'+esc(emptyMsg)+'</div>';
     fillPhotos(el);
+    fillPlaces(el);
+    if(canDelete) wireDeletes(el);
   };
+
+  // Older uploads have no place stored; look them up a few at a time.
+  // OpenStreetMap asks for about one request a second, so this stays gentle.
+  async function fillPlaces(root){
+    const todo = [...root.querySelectorAll('.place')].filter(n => !n.textContent.trim()).slice(0, 12);
+    for(const n of todo){
+      const lat = Number(n.dataset.lat), lng = Number(n.dataset.lng);
+      if(!isFinite(lat) || !isFinite(lng)) continue;
+      const name = await placeName(lat, lng);
+      if(name && n.isConnected) n.textContent = ' · ' + name;
+      await new Promise(r => setTimeout(r, 1100));
+    }
+  }
+
+  // Master only: remove one upload and the photos that belong to it. Two taps.
+  function wireDeletes(root){
+    root.querySelectorAll('button.del').forEach(btn => {
+      btn.onclick = async () => {
+        if(btn.dataset.armed !== '1'){
+          root.querySelectorAll('button.del').forEach(b => { b.dataset.armed=''; b.textContent='Delete'; b.classList.remove('arm'); });
+          btn.dataset.armed = '1'; btn.textContent = 'Delete for good?'; btn.classList.add('arm');
+          return;
+        }
+        btn.disabled = true; btn.textContent = 'Deleting…';
+        const { entry, stock, bill } = btn.dataset;
+        // Drop it from the loaded history FIRST: deleting fires the live listener,
+        // which repaints the feed, and a stale list would put the card straight back.
+        if(archive) archive = archive.filter(x => x.id !== entry);
+        try{
+          if(stock) await deleteDoc(doc(db,'photos',stock));
+          if(bill)  await deleteDoc(doc(db,'photos',bill));
+          await deleteDoc(doc(db,'entries',entry));
+          photoCache.delete(stock); photoCache.delete(bill);
+          const card = btn.closest('.card'); if(card) card.remove();
+          toast('Upload deleted');
+        }catch(e){
+          archive = null;   // history is now uncertain — reload it next time
+          btn.disabled = false; btn.textContent = 'Delete';
+          toast('Could not delete — ' + (e?.code||e?.message||''));
+        }
+      };
+    });
+  }
 
   /* ----- photo + location ----- */
   const picked = { stock:null, bill:null };
@@ -551,9 +633,15 @@ async function boot(){
     $('#locBody').textContent = 'Asking your phone for GPS…';
     if(!navigator.geolocation){ locFail('This browser has no location support.'); return; }
     navigator.geolocation.getCurrentPosition(p => {
-      loc = {lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0)};
+      loc = {lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), place:''};
       $('#locPill').textContent = '±'+loc.acc+' m'; $('#locPill').className = 'pill ok';
-      $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps · '+loc.lat.toFixed(5)+', '+loc.lng.toFixed(5)+'</a>';
+      const coords = loc.lat.toFixed(5)+', '+loc.lng.toFixed(5);
+      $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps<span id="locPlace"></span> · '+coords+'</a>';
+      placeName(loc.lat, loc.lng).then(name => {
+        if(!name || !loc) return;
+        loc.place = name;
+        const el = $('#locPlace'); if(el) el.textContent = ' · ' + name;
+      });
     }, err => {
       locFail(err.code===1 ? 'Location permission was denied. Allow it in your browser settings, then retake the photo.'
             : err.code===3 ? 'GPS timed out. Step outside and retake the photo.'
@@ -617,6 +705,7 @@ async function boot(){
         shop: $('#enShop').value.trim(), notes: $('#enNotes').value.trim(),
         stockPhoto, billPhoto,
         lat: loc ? loc.lat : null, lng: loc ? loc.lng : null, accuracy: loc ? loc.acc : null,
+        place: loc ? (loc.place||'') : '',
         mapUrl: loc ? mapUrl(loc.lat, loc.lng) : '',
         appVersion: APP_VERSION, createdAt: serverTimestamp()
       });
@@ -648,14 +737,16 @@ async function boot(){
   };
   $('#cleanGo').onclick = async () => {
     const btn = $('#cleanGo'), out = $('#cleanOut');
-    const days = Number($('#cleanAge').value);
+    const pick = $('#cleanAge').value;
     if(cleanFound === null){
       btn.disabled = true; out.textContent = 'Checking…';
       try{
-        const s = await getDocs(query(collection(db,'photos'), where('createdAt','<', dayStart(days))));
+        const s = pick === 'all'
+          ? await getDocs(collection(db,'photos'))
+          : await getDocs(query(collection(db,'photos'), where('createdAt','<', dayStart(Number(pick)))));
         cleanFound = s.docs.map(d=>d.id);
         if(!cleanFound.length){
-          out.textContent = 'Nothing is older than that yet.';
+          out.textContent = pick === 'all' ? 'There are no photos stored.' : 'Nothing is older than that yet.';
           cleanFound = null; btn.textContent = 'Check what can be removed';
         } else {
           const mb = Math.round(cleanFound.length * 0.4);
@@ -705,7 +796,7 @@ async function boot(){
     archive = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
   }
   function paintAll(){
-    render($('#allFeed'), filtered(), true, range===0 ? 'Nothing uploaded today yet.' : 'No uploads in this range.');
+    render($('#allFeed'), filtered(), true, range===0 ? 'Nothing uploaded today yet.' : 'No uploads in this range.', true);
     $('#mLabel').textContent = range<0 ? 'Everything ever uploaded is shown.'
       : 'Showing the last '+(range||1)+' day'+((range||1)>1?'s':'')+'. Tap All for the full history.';
     const t0 = dayStart(0);
@@ -764,7 +855,7 @@ async function boot(){
       const mine = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>tsOf(b)-tsOf(a));
       $('#personCard').innerHTML = head(mine.length);
       wireRevoke(p);
-      render($('#personFeed'), mine, false, 'No uploads from this person yet.');
+      render($('#personFeed'), mine, false, 'No uploads from this person yet.', true);
     }catch(e){
       $('#personCard').innerHTML = head('—');
       $('#personFeed').innerHTML = '<div class="feed-empty">Could not load their history.</div>';
@@ -795,17 +886,35 @@ async function boot(){
   /* ----- creating delivery persons (master only) ----- */
   $('#goAdd').onclick = () => {
     ['#adName','#adUser','#adPass','#adPhone','#adVeh'].forEach(id => $(id).value = '');
+    $('#adRole').value = 'delivery'; $('#adRole').onchange();
     $('#adOut').textContent = '';
-    show('vAdd', {title:'Add a delivery person', back:true});
+    show('vAdd', {title:'Add an account', back:true});
   };
-  $('#adCancel').onclick = () => go('vPeople','Delivery persons');
+  $('#adRole').onchange = () => {
+    const m = $('#adRole').value === 'master';
+    $('#adUserHint').textContent = m
+      ? 'A manager can sign in with their email address, or a plain username.'
+      : 'Letters, numbers, dots and underscores. No spaces.';
+    $('#adUser').placeholder = m ? 'name@example.com' : 'raj';
+    $('#masterOpts').innerHTML = m
+      ? MASTER_EMAILS.map(e => '<option value="'+esc(e)+'">').join('')
+      : '';
+  };
+  $('#adRole').onchange();
+  $('#adCancel').onclick = () => go('vPeople','People');
   $('#adGo').onclick = async () => {
     const name = $('#adName').value.trim();
     const user = $('#adUser').value.trim().toLowerCase();
     const pass = $('#adPass').value;
+    const role = $('#adRole').value === 'master' ? 'master' : 'delivery';
     const out = $('#adOut'), btn = $('#adGo');
     if(!name) return out.textContent = 'Enter their full name.';
-    if(!/^[a-z0-9._]{3,}$/.test(user)) return out.textContent = 'Username: at least 3 characters, letters, numbers, dots or underscores only.';
+    const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user);
+    const okUser  = /^[a-z0-9._]{3,}$/.test(user);
+    if(role === 'master' ? !(okEmail || okUser) : !okUser)
+      return out.textContent = role === 'master'
+        ? 'Enter a valid email address, or a plain username of 3+ characters.'
+        : 'Username: at least 3 characters, letters, numbers, dots or underscores only.';
     if(pass.length < 6) return out.textContent = 'Password needs at least 6 characters.';
     btn.disabled = true; out.textContent = 'Creating the account…';
     let second;
@@ -817,10 +926,11 @@ async function boot(){
       await setDoc(doc(db,'users',cred.user.uid), {
         name, username: user, email: toEmail(user),
         phone: $('#adPhone').value.trim(), vehicle: $('#adVeh').value.trim(),
-        role: 'delivery', createdAt: serverTimestamp()
+        role, createdAt: serverTimestamp()
       });
       await signOut(secAuth);
-      out.textContent = 'Done. Give them the username "' + user + '" and the password you chose.';
+      out.textContent = 'Done — ' + (role==='master' ? 'manager' : 'delivery') + ' account created. '
+        + 'They sign in with "' + user + '" and the password you chose.';
       $('#adName').value = $('#adUser').value = $('#adPass').value = $('#adPhone').value = $('#adVeh').value = '';
     }catch(e){
       out.textContent = humanAuthError(e);
