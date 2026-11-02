@@ -13,7 +13,7 @@ window.APP_CONFIG = {
 
   // The ONE account that sees every delivery person. Sign up with this
   // email in the app and it becomes the master automatically.
-  masterEmail: "kanik958@gmail.com",
+    masterEmail: "mis2ibaadatenterprises@gmail.com",
 
   companyName: "Delivery Log"
 };
