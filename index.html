@@ -732,7 +732,7 @@ async function boot(){
     sel.value = keep;
     $('#peopleList').innerHTML = list.length
       ? '<p class="tiny" style="margin:10px 0 0">Counts cover the last 30 days. Open a person for their full history.</p>'
-      : '<div class="feed-empty">No delivery persons have signed up yet.</div>';
+      : '<div class="feed-empty">No delivery persons yet. Tap “Add a delivery person” to create their login.</div>';
     list.forEach(p => {
       const n = allEntries.filter(e=>e.uid===p.id).length;
       const last = allEntries.filter(e=>e.uid===p.id).map(tsOf).sort((a,b)=>b-a)[0];
