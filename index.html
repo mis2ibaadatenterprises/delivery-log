@@ -354,7 +354,7 @@ button.del:disabled{opacity:.6}
 
 <script src="config.js"></script>
 <script type="module">
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.0";
 const $ = s => document.querySelector(s);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls = { get(k){ try{return localStorage.getItem(k)}catch{return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch{} } };
@@ -509,6 +509,7 @@ async function boot(){
   function go(id, title){
     show(id, {title});
     [...$('#tabbar').children].forEach(b => b.setAttribute('aria-current', b.dataset.view===id ? 'page' : 'false'));
+    if(id !== 'vNew') stopWatch();
     if(id==='vNew') resetEntry();
     if(id==='vProfile') fillProfile();
   }
@@ -691,45 +692,85 @@ async function boot(){
     throw new Error('This phone could not process that photo. Set the camera to a smaller picture size and try again.');
   }
 
-  const posOnce = opts => new Promise((res, rej) =>
-    navigator.geolocation.getCurrentPosition(res, rej, opts));
+  // Older phones often never answer getCurrentPosition, but DO deliver
+  // positions to watchPosition. So: run a watch, grab any cached fix at the
+  // same time, keep the best reading, and settle once it is good enough.
+  let watchId = null;
+  function stopWatch(){
+    if(watchId !== null){ try{ navigator.geolocation.clearWatch(watchId); }catch{} watchId = null; }
+  }
 
-  // GPS first; if that times out (indoors, or an older phone with a slow fix)
-  // fall back to the network-based position, which almost always answers.
-  async function findPosition(){
-    try{
-      return await posOnce({ enableHighAccuracy:true, timeout:30000, maximumAge:0 });
-    }catch(e1){
-      if(e1 && e1.code === 1) throw e1;            // denied — a retry won't help
-      return await posOnce({ enableHighAccuracy:false, timeout:30000, maximumAge:300000 });
-    }
+  function describeGeoError(e){
+    if(!e) return 'No position came back. On Samsung phones check Settings → Location → Locating method is set to "GPS, Wi-Fi and mobile networks", not "GPS only".';
+    if(e.code === 1) return 'Location permission is blocked for this site. Tap the lock icon in the address bar → Permissions → Location → Allow, then tap Try location again.';
+    if(e.code === 2) return 'The phone says location is unavailable (error 2). Turn Location off and on again, set Locating method to "GPS, Wi-Fi and mobile networks", and make sure Google Play services is enabled.';
+    if(e.code === 3) return 'Timed out waiting for a position (error 3). Step outside or near a window and tap Try location again.';
+    return 'Location failed: ' + (e.message || 'unknown');
   }
 
   function grabLocation(){
     if(!navigator.geolocation){ locFail('This browser has no location support.'); return null; }
+    stopWatch();
     loc = null;
+    let lastErr = null, done = false, settle;
+    const job = new Promise(r => settle = r);
+    const started = Date.now();
+
     $('#locPill').textContent = 'finding…'; $('#locPill').className = 'pill';
-    $('#locBody').textContent = 'Asking your phone for a position. Outdoors this takes a few seconds; indoors it can take up to a minute.';
-    locJob = findPosition().then(p => {
-      loc = { lat:p.coords.latitude, lng:p.coords.longitude, acc:Math.round(p.coords.accuracy||0), place:'' };
-      $('#locPill').textContent = '±'+loc.acc+' m'; $('#locPill').className = 'pill ok';
-      const coords = loc.lat.toFixed(5)+', '+loc.lng.toFixed(5);
-      $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps<span id="locPlace"></span> · '+coords+'</a>';
-      placeName(loc.lat, loc.lng).then(name => {
-        if(!name || !loc) return;
-        loc.place = name;
-        const el = $('#locPlace'); if(el) el.textContent = ' · ' + name;
-      });
-      return loc;
-    }).catch(err => {
-      locFail(err && err.code === 1
-        ? 'Location permission is blocked for this site. Chrome menu → the lock icon in the address bar → Permissions → Location → Allow, then tap Try location again.'
-        : err && err.code === 3
-          ? 'Could not get a position in time. Step outside or near a window, then tap Try location again.'
-          : 'Location is unavailable right now. Check that Location is switched on in the phone settings, then tap Try location again.');
-      return null;
-    });
-    return locJob;
+    $('#locBody').textContent = 'Looking for a position. This can take up to a minute on an older phone — you can keep filling in the form.';
+
+    const paint = () => {
+      $('#locPill').textContent = '±' + loc.acc + ' m';
+      $('#locPill').className = 'pill ' + (loc.acc <= 500 ? 'ok' : '');
+      const coords = loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5);
+      $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps<span id="locPlace"></span> · '+coords+'</a>'
+        + (loc.acc > 500 ? '<div class="tiny" style="margin-top:5px">Rough position so far — it sharpens while you fill in the form.</div>' : '');
+    };
+
+    const finish = () => {
+      if(done) return; done = true;
+      stopWatch(); clearTimeout(nudge); clearTimeout(giveUp);
+      if(loc){
+        placeName(loc.lat, loc.lng).then(name => {
+          if(!name || !loc) return;
+          loc.place = name;
+          const el = $('#locPlace'); if(el) el.textContent = ' · ' + name;
+        });
+      }
+      settle(loc);
+    };
+
+    const consider = p => {
+      if(done || !p || !p.coords) return;
+      const acc = Math.round(p.coords.accuracy || 0);
+      if(loc && loc.acc <= acc) return;             // keep the better reading
+      loc = { lat:p.coords.latitude, lng:p.coords.longitude, acc, place:'' };
+      paint();
+      // Good enough, or we have waited long enough to stop chasing precision.
+      if(acc <= 100 || Date.now() - started > 25000) finish();
+    };
+    const noteErr = e => { lastErr = e; if(e && e.code === 1){ stopWatch(); if(!loc){ done = true; locFail(describeGeoError(e)); settle(null); } } };
+
+    // 1. anything already known, instantly
+    try{ navigator.geolocation.getCurrentPosition(consider, noteErr, { enableHighAccuracy:false, timeout:15000, maximumAge:600000 }); }catch(e){ noteErr(e); }
+    // 2. a live watch — the one that actually reports on old hardware
+    try{ watchId = navigator.geolocation.watchPosition(consider, noteErr, { enableHighAccuracy:true, timeout:60000, maximumAge:0 }); }catch(e){ noteErr(e); }
+    // 3. after 15s with nothing, ask again without GPS (wifi/cell towers)
+    const nudge = setTimeout(() => {
+      if(done || loc) return;
+      try{ navigator.geolocation.getCurrentPosition(consider, noteErr, { enableHighAccuracy:false, timeout:30000, maximumAge:1800000 }); }catch(e){ noteErr(e); }
+    }, 15000);
+    // 4. hard stop
+    const giveUp = setTimeout(() => {
+      if(done) return;
+      if(loc) return finish();
+      done = true; stopWatch();
+      locFail(describeGeoError(lastErr));
+      settle(null);
+    }, 55000);
+
+    locJob = job;
+    return job;
   }
   function locFail(msg){ loc=null; $('#locPill').textContent='not captured'; $('#locPill').className='pill bad'; $('#locBody').textContent = msg; }
 
