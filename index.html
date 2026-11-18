@@ -79,6 +79,7 @@ input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-vis
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--surface-2);color:var(--fg-dim)}
 .pill.ok{background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok)}
 .pill.bad{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.pill.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 button.del{background:none;border:1px solid var(--line);color:var(--fg-faint);font-size:12px;font-weight:650;
@@ -354,7 +355,7 @@ button.del:disabled{opacity:.6}
 
 <script src="config.js"></script>
 <script type="module">
-const APP_VERSION = "1.5.0";
+const APP_VERSION = "1.6.0";
 const $ = s => document.querySelector(s);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const ls = { get(k){ try{return localStorage.getItem(k)}catch{return null} }, set(k,v){ try{localStorage.setItem(k,v)}catch{} } };
@@ -522,6 +523,7 @@ async function boot(){
         +'<svg class="ico" style="width:15px;height:15px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>'
         +'Open in Maps<span class="place" data-lat="'+e.lat+'" data-lng="'+e.lng+'">'+(e.place ? ' · '+esc(e.place) : '')+'</span>'
         +' · '+e.lat.toFixed(5)+', '+e.lng.toFixed(5)+'</a>'
+        + (e.approx ? ' <span class="pill warn">approximate</span>' : '')
       : '<span class="pill bad">no location</span>';
     const shots = '<div class="shots">'
       + (e.stockPhoto ? '<div class="shot"><span class="tag">Stock</span><img data-photo="'+esc(e.stockPhoto)+'" alt="Stock photo'+(e.shop?' at '+esc(e.shop):'')+'"></div>' : '')
@@ -700,6 +702,24 @@ async function boot(){
     if(watchId !== null){ try{ navigator.geolocation.clearWatch(watchId); }catch{} watchId = null; }
   }
 
+  // Last resort when the phone's own positioning never answers: a rough
+  // position from the internet connection. City-level only — always labelled.
+  async function ipPosition(){
+    const tries = [
+      ['https://ipwho.is/', j => j && j.success !== false && j.latitude ? {lat:+j.latitude, lng:+j.longitude, city:[j.city,j.region].filter(Boolean).join(', ')} : null],
+      ['https://get.geojs.io/v1/ip/geo.json', j => j && j.latitude ? {lat:+j.latitude, lng:+j.longitude, city:[j.city,j.region].filter(Boolean).join(', ')} : null]
+    ];
+    for(const [url, pick] of tries){
+      try{
+        const r = await fetch(url, {cache:'no-store'});
+        if(!r.ok) continue;
+        const hit = pick(await r.json());
+        if(hit && isFinite(hit.lat) && isFinite(hit.lng)) return hit;
+      }catch{}
+    }
+    return null;
+  }
+
   function describeGeoError(e){
     if(!e) return 'No position came back. On Samsung phones check Settings → Location → Locating method is set to "GPS, Wi-Fi and mobile networks", not "GPS only".';
     if(e.code === 1) return 'Location permission is blocked for this site. Tap the lock icon in the address bar → Permissions → Location → Allow, then tap Try location again.';
@@ -720,11 +740,13 @@ async function boot(){
     $('#locBody').textContent = 'Looking for a position. This can take up to a minute on an older phone — you can keep filling in the form.';
 
     const paint = () => {
-      $('#locPill').textContent = '±' + loc.acc + ' m';
-      $('#locPill').className = 'pill ' + (loc.acc <= 500 ? 'ok' : '');
+      $('#locPill').textContent = loc.approx ? 'approximate' : '±' + loc.acc + ' m';
+      $('#locPill').className = 'pill ' + (loc.approx ? 'warn' : (loc.acc <= 500 ? 'ok' : ''));
       const coords = loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5);
       $('#locBody').innerHTML = '<a class="maplink" href="'+mapUrl(loc.lat,loc.lng)+'" target="_blank" rel="noopener">Open in Maps<span id="locPlace"></span> · '+coords+'</a>'
-        + (loc.acc > 500 ? '<div class="tiny" style="margin-top:5px">Rough position so far — it sharpens while you fill in the form.</div>' : '');
+        + (loc.approx
+            ? '<div class="tiny" style="margin-top:5px">GPS did not answer on this phone, so this is the area from the internet connection — right neighbourhood, not the exact shop. It is marked as approximate on the record.</div>'
+            : loc.acc > 500 ? '<div class="tiny" style="margin-top:5px">Rough position so far — it sharpens while you fill in the form.</div>' : '');
     };
 
     const finish = () => {
@@ -761,10 +783,29 @@ async function boot(){
       try{ navigator.geolocation.getCurrentPosition(consider, noteErr, { enableHighAccuracy:false, timeout:30000, maximumAge:1800000 }); }catch(e){ noteErr(e); }
     }, 15000);
     // 4. hard stop
-    const giveUp = setTimeout(() => {
+    const giveUp = setTimeout(async () => {
       if(done) return;
       if(loc) return finish();
-      done = true; stopWatch();
+      stopWatch();
+      $('#locBody').textContent = 'The phone did not return a position (' + ((lastErr && 'error ' + lastErr.code) || 'no answer') + '). Trying the approximate position from the internet…';
+      const ip = await ipPosition();
+      if(done) return;
+      done = true;
+      if(ip){
+        loc = { lat:ip.lat, lng:ip.lng, acc:5000, place:ip.city || '', approx:true };
+        paint();
+        if(!loc.place){
+          placeName(loc.lat, loc.lng).then(name => {
+            if(!name || !loc) return;
+            loc.place = name;
+            const el = $('#locPlace'); if(el) el.textContent = ' · ' + name;
+          });
+        } else {
+          const el = $('#locPlace'); if(el) el.textContent = ' · ' + loc.place;
+        }
+        settle(loc);
+        return;
+      }
       locFail(describeGeoError(lastErr));
       settle(null);
     }, 55000);
@@ -847,6 +888,7 @@ async function boot(){
         stockPhoto, billPhoto,
         lat: loc ? loc.lat : null, lng: loc ? loc.lng : null, accuracy: loc ? loc.acc : null,
         place: loc ? (loc.place||'') : '',
+        approx: loc ? !!loc.approx : false,
         mapUrl: loc ? mapUrl(loc.lat, loc.lng) : '',
         appVersion: APP_VERSION, createdAt: serverTimestamp()
       });
